@@ -126,7 +126,6 @@ func (h *HDUJudger) Submit(u *User) error {
 	if strings.Index(html, "One or more following ERROR(s) occurred.") >= 0 {
 		return SubmitFailed
 	}
-	//TODO check whether submit success
 	return nil
 }
 
@@ -161,7 +160,7 @@ func (h *HDUJudger) GetStatus(u *User) error {
 			log.Println(t, u.SubmitTime)
 			log.Println(status[1:])
 			if t.After(u.SubmitTime) {
-				rid := status[1]
+				rid := status[1] //remote server run id
 				u.Result = HDURes[status[3]]
 
 				if u.Result >= 2 {
@@ -181,7 +180,6 @@ func (h *HDUJudger) GetStatus(u *User) error {
 		}
 		time.Sleep(1 * time.Second)
 	}
-	log.Println("here")
 	return nil
 }
 
@@ -201,12 +199,10 @@ func (h *HDUJudger) GetCEInfo(rid string) (string, error) {
 
 func (h *HDUJudger) Run(u *User) error {
 	for _, apply := range []func(*User) error{h.Init, h.Login, h.Submit, h.GetStatus} {
-		t := time.Now()
 		if err := apply(u); err != nil {
 			log.Println(err)
 			return err
 		}
-		log.Println("time:", time.Now().Sub(t))
 	}
 	return nil
 }

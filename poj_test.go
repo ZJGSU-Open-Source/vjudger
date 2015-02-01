@@ -6,8 +6,8 @@ import (
 	// "time"
 )
 
-func Test_HDU(t *testing.T) {
-	u := &User{Vid: 1000, Lang: 0}
+func Test_PKU(t *testing.T) {
+	u := &User{Vid: 1000, Lang: LanguageCPP}
 	u.Code = `
 #include<iostream>
  
@@ -21,10 +21,10 @@ int main(){
    return 0;
 }
 	`
-	// h := &HDUJudger{}
-	// err := h.Run(u)
-	// if err != nil {
-	// 	t.Error(err)
-	// }
+	h := &PKUJudger{}
+	err := h.Run(u)
+	if err != nil {
+		t.Error(err)
+	}
 	log.Println(*u)
 }

@@ -5,21 +5,21 @@ import (
 )
 
 type User struct {
-	Uid string
-	Sid int
-	Vid int
+	Uid string //uer identify
+	Sid int    //solution id
+	Vid int    //remote problem id
 
-	OJ     string
-	Result int
-	CE     string
-	Code   string
-	Time   int
-	Mem    int
-	Lang   int
-	Length int
+	OJ     string //OJ Token
+	Result int    //Judge result
+	CE     string // Compile error information
+	Code   string //uesr code
+	Time   int    //user time
+	Mem    int    //user memory
+	Lang   int    //user languaga
+	Length int    //user code length
 
-	ErrorCode  int
-	SubmitTime time.Time
+	ErrorCode  int       //remote vjudger error
+	SubmitTime time.Time //time that client submit
 }
 
 const MAX_WaitTime = 120
