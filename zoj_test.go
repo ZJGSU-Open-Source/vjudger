@@ -3,11 +3,10 @@ package vjudger
 import (
 	"log"
 	"testing"
-	// "time"
 )
 
-func Test_HDU(t *testing.T) {
-	u := &User{Vid: 1000, Lang: 0}
+func Test_ZJU(t *testing.T) {
+	u := &User{Vid: 1, Lang: 2}
 	u.Code = `
 #include<iostream>
  
@@ -21,10 +20,9 @@ int main(){
    return 0;
 }
 	`
-	// h := &HDUJudger{}
-	// err := h.Run(u)
-	// if err != nil {
-	// 	t.Error(err)
-	// }
+	// z := &ZJUJudger{}
+	// z.Init(u)
+	// z.Login(u)
+	// z.Submit(u)
 	log.Println(*u)
 }
