@@ -21,6 +21,8 @@ type ZJUJudger struct {
 	userpass string
 }
 
+const ZJUToken = "ZJU"
+
 var ZJURes = map[string]int{"Queuing": 0,
 	"Compile Error":         2,
 	"Accepted":              3,
@@ -39,10 +41,10 @@ var ZJULang = map[int]int{
 	LanguageCPP:  2,
 	LanguageJAVA: 4}
 
-func (h *ZJUJudger) Init(_ *User) error {
+func (h *ZJUJudger) Init(_ UserInterface) error {
 	jar, _ := cookiejar.New(nil)
 	h.client = &http.Client{Jar: jar}
-	h.token = "ZJU"
+	h.token = ZJUToken
 	//To fix
 	pattern := `(\d+)</td><td>(.*?)</td><td>(?s:.*?)<font color=.*?>(.*?)</font>.*?<td>(\d+)MS</td><td>(\d+)K</td><td><a href="/viewcode.php\?rid=\d+"  target=_blank>(\d+) B</td><td>(.*?)</td>`
 	h.pat = regexp.MustCompile(pattern)
@@ -52,12 +54,12 @@ func (h *ZJUJudger) Init(_ *User) error {
 }
 
 func (h *ZJUJudger) Match(token string) bool {
-	if token == h.token {
+	if token == ZJUToken {
 		return true
 	}
 	return false
 }
-func (h *ZJUJudger) Login(_ *User) error {
+func (h *ZJUJudger) Login(_ UserInterface) error {
 
 	h.client.Get("http://acm.zju.edu.cn/onlinejudge/login.do")
 
@@ -91,12 +93,12 @@ func (h *ZJUJudger) Login(_ *User) error {
 	return nil
 }
 
-func (h *ZJUJudger) Submit(u *User) error {
+func (h *ZJUJudger) Submit(u UserInterface) error {
 
 	uv := url.Values{}
-	uv.Add("problemId", strconv.Itoa(u.Vid))
-	uv.Add("languageId", strconv.Itoa(ZJULang[u.Lang]))
-	uv.Add("source", u.Code)
+	uv.Add("problemId", strconv.Itoa(u.GetVid()))
+	uv.Add("languageId", strconv.Itoa(ZJULang[u.GetLang()]))
+	uv.Add("source", u.GetCode())
 
 	req, err := http.NewRequest("POST", "http://acm.zju.edu.cn/onlinejudge/submit.do", strings.NewReader(uv.Encode()))
 	if err != nil {
@@ -105,7 +107,7 @@ func (h *ZJUJudger) Submit(u *User) error {
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	u.SubmitTime = time.Now()
+	u.SetSubmitTime(time.Now())
 	resp, err := h.client.Do(req)
 	if err != nil {
 		return BadInternet
@@ -121,12 +123,12 @@ func (h *ZJUJudger) Submit(u *User) error {
 	return nil
 }
 
-func (h *ZJUJudger) GetStatus(u *User) error {
+func (h *ZJUJudger) GetStatus(u UserInterface) error {
 
 	statusUrl := "http://acm.zju.edu.cn/onlinejudge/showRuns.do?contestId=1" +
-		"&problemCode=" + strconv.Itoa(u.Vid) +
+		"&problemCode=" + strconv.Itoa(u.GetVid()) +
 		"&handle=" + h.username +
-		"&languageIds=" + strconv.Itoa(u.Lang)
+		"&languageIds=" + strconv.Itoa(u.GetLang())
 
 	endTime := time.Now().Add(MAX_WaitTime * time.Second)
 
@@ -147,22 +149,23 @@ func (h *ZJUJudger) GetStatus(u *User) error {
 		for i := len(AllStatus) - 1; i >= 0; i-- {
 			status := AllStatus[i]
 			t, _ := time.Parse(layout, status[2]+" (CST)")
-			// t = t.Add(40 * time.Second) //HDU server's time is less 36s.
-			if t.After(u.SubmitTime) {
+			if t.After(u.GetSubmitTime()) {
 				rid := status[1] //remote server run id
-				u.Result = HDURes[status[3]]
+				u.SetResult(ZJURes[status[3]])
 
-				if u.Result >= JudgeRJ {
-					if u.Result == JudgeCE {
-						u.CE, err = h.GetCEInfo(rid)
+				if u.GetResult() >= JudgeRJ {
+					if u.GetResult() == JudgeCE {
+						CE, err := h.GetCEInfo(rid)
 						if err != nil {
 							log.Println(err)
 						}
+						u.SetErrorInfo(CE)
 					}
 
-					u.Time, _ = strconv.Atoi(status[4])
-					u.Mem, _ = strconv.Atoi(status[5])
-					u.Length, _ = strconv.Atoi(status[6])
+					Time, _ := strconv.Atoi(status[4])
+					Mem, _ := strconv.Atoi(status[5])
+					Length, _ := strconv.Atoi(status[6])
+					u.SetResource(Time, Mem, Length)
 					return nil
 				}
 			}
@@ -183,8 +186,8 @@ func (h *ZJUJudger) GetCEInfo(rid string) (string, error) {
 	return string(b), nil
 }
 
-func (h *ZJUJudger) Run(u *User) error {
-	for _, apply := range []func(*User) error{h.Init, h.Login, h.Submit, h.GetStatus} {
+func (h *ZJUJudger) Run(u UserInterface) error {
+	for _, apply := range []func(UserInterface) error{h.Init, h.Login, h.Submit, h.GetStatus} {
 		if err := apply(u); err != nil {
 			log.Println(err)
 			return err
