@@ -4,48 +4,37 @@ import (
 	"time"
 )
 
-type User struct {
-	Uid string //uer identify
-	Sid int    //solution id
-	Vid int    //remote problem id
-
-	OJ     string //OJ Token
-	Result int    //Judge result
-	CE     string // Compile error information
-	Code   string //uesr code
-	Time   int    //user time
-	Mem    int    //user memory
-	Lang   int    //user languaga
-	Length int    //user code length
-
-	ErrorCode  int       //remote vjudger error
-	SubmitTime time.Time //time that client submit
+type UserInterface interface {
+	GetResult() int
+	SetResult(int)
+	SetResource(int, int, int)
+	SetErrorInfo(string)
+	GetSubmitTime() time.Time
+	SetSubmitTime(time.Time)
+	GetCode() string
+	GetOJ() string
+	GetLang() int
+	GetVid() int
+	GetSid() int
+	UpdateSolution()
 }
 
 const MAX_WaitTime = 120
 
 type Vjudger interface {
-	Init(*User) error
-	Login(*User) error
-	Submit(*User) error
-	GetStatus(*User) error
-	Run(*User) error
+	Init(UserInterface) error
+	Login(UserInterface) error
+	Submit(UserInterface) error
+	GetStatus(UserInterface) error
+	Run(UserInterface) error
 	Match(string) bool
-}
-
-func (u *User) NewSolution() {
-
-}
-
-func (u *User) UpdateSolution() {
-
 }
 
 var VJs = []Vjudger{&HDUJudger{}}
 
-func Judge(u *User) {
+func Judge(u UserInterface) {
 	for _, vj := range VJs {
-		if vj.Match(u.OJ) {
+		if vj.Match(u.GetOJ()) { //init?match
 			vj.Run(u)
 			break
 		}

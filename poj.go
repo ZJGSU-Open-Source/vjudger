@@ -21,6 +21,8 @@ type PKUJudger struct {
 	userpass string
 }
 
+const PKUToken = "PKU"
+
 var PKURes = map[string]int{"Waiting": 0,
 	"Compiling":             1,
 	"Running & Judging":     1,
@@ -40,10 +42,10 @@ var PKULang = map[int]int{
 	LanguageCPP:  0,
 	LanguageJAVA: 2}
 
-func (h *PKUJudger) Init(_ *User) error {
+func (h *PKUJudger) Init(_ UserInterface) error {
 	jar, _ := cookiejar.New(nil)
 	h.client = &http.Client{Jar: jar, Timeout: time.Second * 10}
-	h.token = "PKU"
+	h.token = PKUToken
 	pattern := `<tr align=center><td>(\d+)</td><td><a href=userstatus?user_id=vsake>vsake</a></td><td>.*?<font color=.*?>(.*?)</font>.*?</td><td>(.*?)</td><td>(.*?)</td><td><a href=showsource?solution_id=\d+ target=_blank>.*?</a></td><td>(\d+)B</td><td>(.*?)</td></tr>`
 	//runid - result - memory - time - code_length - submit time
 	h.pat = regexp.MustCompile(pattern)
@@ -53,13 +55,13 @@ func (h *PKUJudger) Init(_ *User) error {
 }
 
 func (h *PKUJudger) Match(token string) bool {
-	if token == h.token {
+	if token == PKUToken {
 		return true
 	}
 	return false
 }
 
-func (h *PKUJudger) Login(_ *User) error {
+func (h *PKUJudger) Login(_ UserInterface) error {
 
 	h.client.Get("http://poj.org/login")
 
@@ -94,13 +96,13 @@ func (h *PKUJudger) Login(_ *User) error {
 	return nil
 }
 
-func (h *PKUJudger) Submit(u *User) error {
+func (h *PKUJudger) Submit(u UserInterface) error {
 
 	uv := url.Values{}
 
-	uv.Add("problem_id", strconv.Itoa(u.Vid))
-	uv.Add("language", strconv.Itoa(PKULang[u.Lang]))
-	uv.Add("source", u.Code)
+	uv.Add("problem_id", strconv.Itoa(u.GetVid()))
+	uv.Add("language", strconv.Itoa(PKULang[u.GetLang()]))
+	uv.Add("source", u.GetCode())
 	uv.Add("submit", "Submit")
 
 	req, err := http.NewRequest("POST", "http://poj.org/submit", strings.NewReader(uv.Encode()))
@@ -110,7 +112,7 @@ func (h *PKUJudger) Submit(u *User) error {
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	u.SubmitTime = time.Now()
+	u.SetSubmitTime(time.Now())
 	resp, err := h.client.Do(req)
 	if err != nil {
 		return BadInternet
@@ -130,12 +132,12 @@ func (h *PKUJudger) Submit(u *User) error {
 	return nil
 }
 
-func (h *PKUJudger) GetStatus(u *User) error {
+func (h *PKUJudger) GetStatus(u UserInterface) error {
 
 	statusUrl := "http://poj.org/status?problem_id=" +
-		strconv.Itoa(u.Vid) + "&user_id=" +
+		strconv.Itoa(u.GetVid()) + "&user_id=" +
 		h.username + "&result=&language=" +
-		strconv.Itoa(PKULang[u.Lang])
+		strconv.Itoa(PKULang[u.GetLang()])
 	endTime := time.Now().Add(MAX_WaitTime * time.Second)
 
 	for true {
@@ -157,22 +159,24 @@ func (h *PKUJudger) GetStatus(u *User) error {
 		for i := len(AllStatus) - 1; i >= 0; i-- {
 			status := AllStatus[i]
 			t, _ := time.Parse(layout, status[6]+" (CST)")
-			log.Println(t, u.SubmitTime)
+			log.Println(t, u.GetSubmitTime())
 			// t = t.Add(40 * time.Second) //HDU server's time is less 36s.
-			if t.After(u.SubmitTime) {
+			if t.After(u.GetSubmitTime()) {
 				rid := status[1] //remote server run id
-				u.Result = HDURes[status[2]]
+				u.SetResult(HDURes[status[2]])
 
-				if u.Result >= JudgeRJ {
-					if u.Result == JudgeCE {
-						u.CE, err = h.GetCEInfo(rid)
+				if u.GetResult() >= JudgeRJ {
+					if u.GetResult() == JudgeCE {
+						CE, err := h.GetCEInfo(rid)
 						if err != nil {
 							log.Println(err)
 						}
+						u.SetErrorInfo(CE)
 					}
-					u.Time, _ = strconv.Atoi(status[4][:len(status[4])-2])
-					u.Mem, _ = strconv.Atoi(status[3][:len(status[3])-1])
-					u.Length, _ = strconv.Atoi(status[5])
+					Time, _ := strconv.Atoi(status[4][:len(status[4])-2])
+					Mem, _ := strconv.Atoi(status[3][:len(status[3])-1])
+					Length, _ := strconv.Atoi(status[5])
+					u.SetResource(Time, Mem, Length)
 					return nil
 				}
 			}
@@ -196,8 +200,8 @@ func (h *PKUJudger) GetCEInfo(rid string) (string, error) {
 	return match[1], nil
 }
 
-func (h *PKUJudger) Run(u *User) error {
-	for _, apply := range []func(*User) error{h.Init, h.Login, h.Submit, h.GetStatus} {
+func (h *PKUJudger) Run(u UserInterface) error {
+	for _, apply := range []func(UserInterface) error{h.Init, h.Login, h.Submit, h.GetStatus} {
 		if err := apply(u); err != nil {
 			log.Println(err)
 			return err
