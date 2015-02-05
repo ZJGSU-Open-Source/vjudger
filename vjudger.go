@@ -6,7 +6,7 @@ import (
 
 type UserInterface interface {
 	GetResult() int
-	SetResult(int) int
+	SetResult(int)
 	SetResource(int, int, int)
 	SetErrorInfo(string)
 	GetSubmitTime() time.Time
@@ -15,6 +15,7 @@ type UserInterface interface {
 	GetOJ() string
 	GetLang() int
 	GetVid() int
+	GetSid() int
 	UpdateSolution()
 }
 
