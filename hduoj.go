@@ -43,11 +43,22 @@ var HDURes = map[string]int{"Queuing": 0,
 	"Presentation Error":                        9,
 	"System Error":                              10}
 
+var HDULang = map[int]int{
+	LanguageC:    1,
+	LanguageCPP:  0,
+	LanguageJAVA: 5}
+
+var HDUSearchLang = map[int]int{
+	LanguageC:    2,
+	LanguageCPP:  1,
+	LanguageJAVA: 6}
+
 func (h *HDUJudger) Init(_ UserInterface) error {
 	jar, _ := cookiejar.New(nil)
-	h.client = &http.Client{Jar: jar}
+	h.client = &http.Client{Jar: jar, Timeout: time.Second * 10}
 	h.token = HDUToken
-	pattern := `(\d+)</td><td>(.*?)</td><td>(?s:.*?)<font color=.*?>(.*?)</font>.*?<td>(\d+)MS</td><td>(\d+)K</td><td><a href="/viewcode.php\?rid=\d+"  target=_blank>(\d+) B</td><td>(.*?)</td>`
+	pattern := `(\d+)</td><td>(.*?)</td><td>(?s:.*?)<font color=.*?>(.*?)</font>.*?<td>(\d+)MS</td><td>(\d+)K</td><td><a href="/viewcode.php\?rid=\d+"  target=_blank>(\d+) B</td><td>.*?</td>`
+
 	h.pat = regexp.MustCompile(pattern)
 	h.username = "mysake"
 	h.userpass = "123456"
@@ -99,7 +110,7 @@ func (h *HDUJudger) Submit(u UserInterface) error {
 	uv := url.Values{}
 	uv.Add("check", "0")
 	uv.Add("problemid", strconv.Itoa(u.GetVid()))
-	uv.Add("language", strconv.Itoa(u.GetLang()))
+	uv.Add("language", strconv.Itoa(HDULang[u.GetLang()]))
 	uv.Add("usercode", u.GetCode())
 
 	req, err := http.NewRequest("POST", "http://acm.hdu.edu.cn/submit.php?action=submit", strings.NewReader(uv.Encode()))
@@ -137,7 +148,7 @@ func (h *HDUJudger) GetStatus(u UserInterface) error {
 	statusUrl := "http://acm.hdu.edu.cn/status.php?first=&" +
 		"pid=" + strconv.Itoa(u.GetVid()) +
 		"&user=" + h.username +
-		"&lang=" + strconv.Itoa(u.GetLang()) + "&status=0"
+		"&lang=" + strconv.Itoa(HDUSearchLang[u.GetLang()]) + "&status=0"
 
 	endTime := time.Now().Add(MAX_WaitTime * time.Second)
 
@@ -159,7 +170,7 @@ func (h *HDUJudger) GetStatus(u UserInterface) error {
 		for i := len(AllStatus) - 1; i >= 0; i-- {
 			status := AllStatus[i]
 			t, _ := time.Parse(layout, status[2]+" (CST)")
-			t = t.Add(40 * time.Second) //HDU server's time is less 36s.
+			t = t.Add(36 * time.Second) //HDU server's time is less 36s.
 			log.Println(t, u.GetSubmitTime())
 			log.Println(status[1:])
 			if t.After(u.GetSubmitTime()) {
