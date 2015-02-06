@@ -1,6 +1,7 @@
 package vjudger
 
 import (
+	"html"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -46,7 +47,7 @@ func (h *PKUJudger) Init(_ UserInterface) error {
 	jar, _ := cookiejar.New(nil)
 	h.client = &http.Client{Jar: jar, Timeout: time.Second * 10}
 	h.token = PKUToken
-	pattern := `<tr align=center><td>(\d+)</td><td><a href=userstatus?user_id=vsake>vsake</a></td><td>.*?<font color=.*?>(.*?)</font>.*?</td><td>(.*?)</td><td>(.*?)</td><td><a href=showsource?solution_id=\d+ target=_blank>.*?</a></td><td>(\d+)B</td><td>(.*?)</td></tr>`
+	pattern := `<tr align=center><td>(\d+)</td><td><a href=userstatus\?user_id=vsake>vsake</a></td><td>.*?<font color=.*?>(.*?)</font>.*?</td><td>(.*?)</td><td>(.*?)</td><td><a href=showsource\?solution_id=\d+ target=_blank>.*?</a></td><td>(\d+)B</td><td>(.*?)</td></tr>`
 	//runid - result - memory - time - code_length - submit time
 	h.pat = regexp.MustCompile(pattern)
 	h.username = "vsake"
@@ -138,6 +139,9 @@ func (h *PKUJudger) GetStatus(u UserInterface) error {
 		strconv.Itoa(u.GetVid()) + "&user_id=" +
 		h.username + "&result=&language=" +
 		strconv.Itoa(PKULang[u.GetLang()])
+
+	log.Println(statusUrl)
+
 	endTime := time.Now().Add(MAX_WaitTime * time.Second)
 
 	for true {
@@ -152,9 +156,7 @@ func (h *PKUJudger) GetStatus(u UserInterface) error {
 
 		b, _ := ioutil.ReadAll(resp.Body)
 		AllStatus := h.pat.FindAllStringSubmatch(string(b), -1)
-		log.Println(string(b))
-		log.Println(AllStatus)
-		return BadStatus
+
 		layout := "2006-01-02 15:04:05 (MST)" //parse time
 		for i := len(AllStatus) - 1; i >= 0; i-- {
 			status := AllStatus[i]
@@ -163,18 +165,19 @@ func (h *PKUJudger) GetStatus(u UserInterface) error {
 			// t = t.Add(40 * time.Second) //HDU server's time is less 36s.
 			if t.After(u.GetSubmitTime()) {
 				rid := status[1] //remote server run id
-				u.SetResult(HDURes[status[2]])
-
-				if u.GetResult() >= JudgeRJ {
+				u.SetResult(PKURes[status[2]])
+				Time, Mem := 0, 0
+				if u.GetResult() > JudgeRJ {
 					if u.GetResult() == JudgeCE {
 						CE, err := h.GetCEInfo(rid)
 						if err != nil {
 							log.Println(err)
 						}
 						u.SetErrorInfo(CE)
+					} else {
+						Time, _ = strconv.Atoi(status[4][:len(status[4])-2])
+						Mem, _ = strconv.Atoi(status[3][:len(status[3])-1])
 					}
-					Time, _ := strconv.Atoi(status[4][:len(status[4])-2])
-					Mem, _ := strconv.Atoi(status[3][:len(status[3])-1])
 					Length, _ := strconv.Atoi(status[5])
 					u.SetResource(Time, Mem, Length)
 					return nil
@@ -194,10 +197,10 @@ func (h *PKUJudger) GetCEInfo(rid string) (string, error) {
 	}
 
 	b, _ := ioutil.ReadAll(resp.Body)
-	pre := `(?s)<font size="3">(.*?)</font>`
+	pre := `(?s)<pre>(.*?)</pre>`
 	re := regexp.MustCompile(pre)
 	match := re.FindStringSubmatch(string(b))
-	return match[1], nil
+	return html.UnescapeString(match[1]), nil
 }
 
 func (h *PKUJudger) Run(u UserInterface) error {
