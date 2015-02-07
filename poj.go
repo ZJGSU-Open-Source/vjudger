@@ -140,8 +140,6 @@ func (h *PKUJudger) GetStatus(u UserInterface) error {
 		h.username + "&result=&language=" +
 		strconv.Itoa(PKULang[u.GetLang()])
 
-	log.Println(statusUrl)
-
 	endTime := time.Now().Add(MAX_WaitTime * time.Second)
 
 	for true {
