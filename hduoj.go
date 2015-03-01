@@ -170,7 +170,7 @@ func (h *HDUJudger) GetStatus(u UserInterface) error {
 		for i := len(AllStatus) - 1; i >= 0; i-- {
 			status := AllStatus[i]
 			t, _ := time.Parse(layout, status[2]+" (CST)")
-			t = t.Add(36 * time.Second) //HDU server's time is less 36s.
+			//t = t.Add(36 * time.Second) //HDU server's time is less 36s.
 			log.Println(t, u.GetSubmitTime())
 			log.Println(status[1:])
 			if t.After(u.GetSubmitTime()) {

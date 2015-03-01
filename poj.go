@@ -172,7 +172,7 @@ func (h *PKUJudger) GetStatus(u UserInterface) error {
 							log.Println(err)
 						}
 						u.SetErrorInfo(CE)
-					} else {
+					} else if u.GetResult() == JudgeAC {
 						Time, _ = strconv.Atoi(status[4][:len(status[4])-2])
 						Mem, _ = strconv.Atoi(status[3][:len(status[3])-1])
 					}
