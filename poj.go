@@ -1,6 +1,7 @@
 package vjudger
 
 import (
+    "encoding/base64"
     "html"
     "io/ioutil"
     "log"
@@ -62,7 +63,20 @@ func (h *PKUJudger) Match(token string) bool {
     return false
 }
 
-func (h *PKUJudger) Login(_ UserInterface) error {
+func (h *PKUJudger) Login(_ UserInterface) (err error) {
+    for i := 0; i < 3; i++ {
+        err = h.login()
+        if err == nil {
+            return nil
+        }
+    }
+
+    return err
+}
+
+func (h *PKUJudger) login() error {
+
+    log.Println("pku login")
 
     h.client.Get("http://poj.org/login")
 
@@ -96,14 +110,37 @@ func (h *PKUJudger) Login(_ UserInterface) error {
     return nil
 }
 
-func (h *PKUJudger) Submit(u UserInterface) error {
+// FixCode sets a code id on the top of code
+func (h *PKUJudger) FixCode(sid string, code string) string {
+    return "//" + sid + "\n" + code
+}
+
+func (h *PKUJudger) Submit(u UserInterface) (err error) {
+    for i := 1; i < 3; i++ {
+        err = h.submit(u)
+        if err != BadInternet || err == nil {
+            break
+        }
+    }
+
+    return
+}
+
+func (h *PKUJudger) submit(u UserInterface) error {
+    log.Println("pku submit")
 
     uv := url.Values{}
 
+    sd := h.FixCode(strconv.Itoa(u.GetSid()), u.GetCode())
+    sd = strings.Replace(sd, "\r\n", "\n", -1)
+
+    source := base64.StdEncoding.EncodeToString([]byte(sd))
+
     uv.Add("problem_id", strconv.Itoa(u.GetVid()))
     uv.Add("language", strconv.Itoa(PKULang[u.GetLang()]))
-    uv.Add("source", u.GetCode())
+    uv.Add("source", source)
     uv.Add("submit", "Submit")
+    uv.Add("encoded", "1")
 
     req, err := http.NewRequest("POST", "http://poj.org/submit", strings.NewReader(uv.Encode()))
     if err != nil {
@@ -120,18 +157,29 @@ func (h *PKUJudger) Submit(u UserInterface) error {
 
     b, _ := ioutil.ReadAll(resp.Body)
     html := string(b)
+
     // log.Println(html)
     if strings.Index(html, "No such problem") >= 0 {
+        log.Println(NoSuchProblem)
         return NoSuchProblem
     }
     if strings.Index(html, "Source code too long or too short,submit FAILED;") >= 0 {
+        log.Println(SubmitFailed)
+
         return SubmitFailed
     }
 
+    if strings.Index(html, "504 Gateway Time-out") >= 0 {
+        return BadInternet
+    }
+
+    log.Println("submit success")
     return nil
 }
 
 func (h *PKUJudger) GetStatus(u UserInterface) error {
+
+    log.Println("fetch status")
 
     statusUrl := "http://poj.org/status?problem_id=" +
         strconv.Itoa(u.GetVid()) + "&user_id=" +
@@ -153,14 +201,13 @@ func (h *PKUJudger) GetStatus(u UserInterface) error {
         b, _ := ioutil.ReadAll(resp.Body)
         AllStatus := h.pat.FindAllStringSubmatch(string(b), -1)
 
-        layout := "2006-01-02 15:04:05 (MST)" //parse time
-        for i := len(AllStatus) - 1; i >= 0; i-- {
+        for i := 0; i < len(AllStatus); i++ {
             status := AllStatus[i]
-            t, _ := time.Parse(layout, status[6]+" (CST)")
-            log.Println(t, u.GetSubmitTime())
-            // t = t.Add(40 * time.Second) //HDU server's time is less 36s.
-            if t.After(u.GetSubmitTime()) {
-                rid := status[1] //remote server run id
+
+            rid := status[1] //remote server run id
+
+            //although it uses more time to get id, but it should work fine:)
+            if h.GetCodeID(rid) == strconv.Itoa(u.GetSid()) {
                 u.SetResult(PKURes[status[2]])
                 Time, Mem := 0, 0
                 if u.GetResult() > JudgeRJ {
@@ -174,8 +221,7 @@ func (h *PKUJudger) GetStatus(u UserInterface) error {
                         Time, _ = strconv.Atoi(status[4][:len(status[4])-2])
                         Mem, _ = strconv.Atoi(status[3][:len(status[3])-1])
                     }
-                    Length, _ := strconv.Atoi(status[5])
-                    u.SetResource(Time, Mem, Length)
+                    u.SetResource(Time, Mem, len([]byte(u.GetCode())))
                     return nil
                 }
             }
@@ -183,6 +229,22 @@ func (h *PKUJudger) GetStatus(u UserInterface) error {
         time.Sleep(1 * time.Second)
     }
     return nil
+}
+
+func (h *PKUJudger) GetCodeID(rid string) string {
+    resp, err := h.client.Get("http://poj.org/showsource?solution_id=" + rid)
+    if err != nil {
+        return ""
+    }
+
+    b, _ := ioutil.ReadAll(resp.Body)
+
+    pre := `(?s)<pre.*?>(.*?)</pre>`
+    re := regexp.MustCompile(pre)
+    match := re.FindStringSubmatch(string(b))
+    code := html.UnescapeString(match[1])
+    split := strings.Split(code, "\n")
+    return strings.TrimPrefix(split[0], "//")
 }
 
 func (h *PKUJudger) GetCEInfo(rid string) (string, error) {
@@ -201,7 +263,7 @@ func (h *PKUJudger) GetCEInfo(rid string) (string, error) {
 func (h *PKUJudger) Run(u UserInterface) error {
     for _, apply := range []func(UserInterface) error{h.Init, h.Login, h.Submit, h.GetStatus} {
         if err := apply(u); err != nil {
-            // log.Println(err)
+            log.Println(err)
             return err
         }
     }
