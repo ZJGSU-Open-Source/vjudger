@@ -1,6 +1,7 @@
 package vjudger
 
 import (
+    "encoding/base64"
     "html"
     "io/ioutil"
     "log"
@@ -62,7 +63,20 @@ func (h *PKUJudger) Match(token string) bool {
     return false
 }
 
-func (h *PKUJudger) Login(_ UserInterface) error {
+func (h *PKUJudger) Login(_ UserInterface) (err error) {
+    for i := 0; i < 3; i++ {
+        err = h.login()
+        if err == nil {
+            return nil
+        }
+    }
+
+    return err
+}
+
+func (h *PKUJudger) login() error {
+
+    log.Println("pku login")
 
     h.client.Get("http://poj.org/login")
 
@@ -101,14 +115,32 @@ func (h *PKUJudger) FixCode(sid string, code string) string {
     return "//" + sid + "\n" + code
 }
 
-func (h *PKUJudger) Submit(u UserInterface) error {
+func (h *PKUJudger) Submit(u UserInterface) (err error) {
+    for i := 1; i < 3; i++ {
+        err = h.submit(u)
+        if err != BadInternet || err == nil {
+            break
+        }
+    }
+
+    return
+}
+
+func (h *PKUJudger) submit(u UserInterface) error {
+    log.Println("pku submit")
 
     uv := url.Values{}
 
+    sd := h.FixCode(strconv.Itoa(u.GetSid()), u.GetCode())
+    sd = strings.Replace(sd, "\r\n", "\n", -1)
+
+    source := base64.StdEncoding.EncodeToString([]byte(sd))
+
     uv.Add("problem_id", strconv.Itoa(u.GetVid()))
     uv.Add("language", strconv.Itoa(PKULang[u.GetLang()]))
-    uv.Add("source", h.FixCode(strconv.Itoa(u.GetSid()), u.GetCode()))
+    uv.Add("source", source)
     uv.Add("submit", "Submit")
+    uv.Add("encoded", "1")
 
     req, err := http.NewRequest("POST", "http://poj.org/submit", strings.NewReader(uv.Encode()))
     if err != nil {
@@ -125,18 +157,29 @@ func (h *PKUJudger) Submit(u UserInterface) error {
 
     b, _ := ioutil.ReadAll(resp.Body)
     html := string(b)
+
     // log.Println(html)
     if strings.Index(html, "No such problem") >= 0 {
+        log.Println(NoSuchProblem)
         return NoSuchProblem
     }
     if strings.Index(html, "Source code too long or too short,submit FAILED;") >= 0 {
+        log.Println(SubmitFailed)
+
         return SubmitFailed
     }
 
+    if strings.Index(html, "504 Gateway Time-out") >= 0 {
+        return BadInternet
+    }
+
+    log.Println("submit success")
     return nil
 }
 
 func (h *PKUJudger) GetStatus(u UserInterface) error {
+
+    log.Println("fetch status")
 
     statusUrl := "http://poj.org/status?problem_id=" +
         strconv.Itoa(u.GetVid()) + "&user_id=" +
@@ -220,7 +263,7 @@ func (h *PKUJudger) GetCEInfo(rid string) (string, error) {
 func (h *PKUJudger) Run(u UserInterface) error {
     for _, apply := range []func(UserInterface) error{h.Init, h.Login, h.Submit, h.GetStatus} {
         if err := apply(u); err != nil {
-            // log.Println(err)
+            log.Println(err)
             return err
         }
     }
